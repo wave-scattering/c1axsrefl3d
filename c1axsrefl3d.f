@@ -19,7 +19,7 @@ C     RMAX ... the number of different diffraction orders which are
 C              used to couple scattering planes together to form a
 C              stack; controls the precision of interplane scattering
 C     Q0   ... the Ewald parameter; controls the precision of
-C              the lattice summation
+C              the lattice summation - determined in dlmsf2in3.f
 C
 C     Whereas, in the wavelength range considered (300nm-infinity) and
 C     lattice spacing from hundreds of nanometers up, there is no need
@@ -107,22 +107,24 @@ C     ------------------------------------------------------------------
 C  
 C ..  PARAMETER STATEMENTS ..  
 C  
-      INTEGER LMAXD,IGD,IGKD,NELMD,NMAT,NCOMPD,NPLAND,NFIN,NOUT,NSTACK
+      INTEGER LMAXD,IGD,IGKD,NELMD,NCOMPD,NPLAND,NDM,NFIN,NOUT,
+     & NSTACK,IDM
       INTEGER ILCS
       character*1 ync,ynsp
-      logical ynbrug,ordered,ynphase,ynperfcon,ynperfconv
+      logical ynsz,ynbrug,ynmg,ordered,ynphase,ynperfcon,ynperfconv
       real*8 TOL,EPS0
       COMPLEX*16 CCEPS,CSEPS,EPSL,EPSR
+
 C ::: number of the output unit
       PARAMETER (NOUT=8)
 * If specular RTA to be calculated, YNSP='y', otherwise YNSP='n'.
 * In the latter case, the total reflectance, transmittance, absorptance
 * calculated
-      PARAMETER(YNSP='y')
-* If ordered system than ORDERED=.TRUE. otherwise ORDERED=.FALSE.
+      PARAMETER(YNSP='n')
+* If ordered system then ORDERED=.TRUE. otherwise ORDERED=.FALSE.
       PARAMETER(ORDERED=.TRUE.)
 *      
-      PARAMETER (ynphase=.false.)      ! true only if reflection phase
+      PARAMETER (ynphase=.false.)      ! true only if reflection phase needed
 *       
 C ::: relative error allowed for the T matrix. If the convergence
 *     within TOL is not reached, program issues warning
@@ -130,22 +132,10 @@ C ::: relative error allowed for the T matrix. If the convergence
 *
 C ::: Stacking sequence label - used only if ORDERED=.TRUE. !!!
 *     NSTACK             stacking sequence
-*     NSTACK             stacking sequence
-*        0               sc lattice in the (100) direction
+*
 *        1               fcc lattice in the (111) direction
-*        2               fcc lattice in the (100) direction
-*        3               fcc lattice in the (110) direction
-*        4               hcp lattice in the (111) direction
-*        5               bct lattice in the (100) direction
-*        6               hcp layers stacked on top of each other
-*        7               diamond (111) as stacking of complex bilayers
-*        8               diamond (111) as fcc - AABBCC stacking
-*        9               diamond (111) as fcc - ABBCCA stacking
-*       10               diamond (100) stacking
-*       11               AB2 lattice - indiv. layers
-*       12               AB2 lattice - single complex bilayer
 * 
-      PARAMETER (NSTACK=0)
+      PARAMETER (NSTACK=1)
 *
 * angular-momentum cut off 
       PARAMETER(LMAXD=8)
@@ -196,14 +186,14 @@ C ::: Stacking sequence label - used only if ORDERED=.TRUE. !!!
       PARAMETER(NCOMPD=8)
 * cut off on the number of non-primitive scattering planes within an unit slice
       PARAMETER(NPLAND=6) 
-* material code number 
-c   NMAT=0             dispersionless dielectric                              
-c   NMAT=1             Drude metal
-c   NMAT=2             Ag
-c   NMAT=3             Au
+*  The number of different dispersive materials which
+*  dielectric constant requires a reading of data from
+*  an external data field. No data or single data reading
+*  required are both covered by the option NDM=1
 *
-      PARAMETER(NMAT=2)   
-*
+      PARAMETER (NDM=1) 
+
+*     
 c Temporarily option for reading of the real data for the dielectric constant 
 c The number of the entries in a material data file to be read below
 c          agc.dat                NFIN=73       ! from Palik 
@@ -214,12 +204,24 @@ c          Au*new.dat             NFIN=142
 c          Cudat.dat              NFIN=47       ! from Palik
 c          Aldat.dat              NFIN=80       ! from Palik
 c          Nidat.dat              NFIN=68       ! from Palik
-* 
-      PARAMETER (NFIN=73) 
+c          Sidat.dat              NFIN=291
+c          sieps.dat              NFIN=223
+*
+      PARAMETER (NFIN=73)  !in the case of NDM>1, select the maximum
+                           !value of the corresponding NFIN numbers
+*
+c If ynsz=.true., performs size correction for ZEPS1. Otherwise
+c ynsz=false.
+      parameter (ynsz=.false.)  
 *
 c If ynbrug=.true., performs Bruggeman approximation for ZEPS1. Otherwise
 c ynbrug=false.
-       parameter (ynbrug=.false.)  
+      parameter (ynbrug=.false.)  
+*
+c If ynmg=.true., performs MG approximation for ZEPS1. Otherwise
+c ynmg=false.
+      parameter (ynmg=.false.)  
+*
 ******************************************************************   
 c                     UNIT SLICE PARAMETERS
 *
@@ -231,28 +233,30 @@ c                     UNIT SLICE PARAMETERS
       parameter (ynperfcon=.false.)
 c The coating layer to which material data are read in
       parameter (ilcs=1)
+*
+* test:  eps=15, r=0.4705
+*
 c sphere (core) dielectric constant  (depending whether ync is 'y' or 'n')   
-      PARAMETER (CCEPS=(1.45D0,0.d0)**2)
+      PARAMETER (CCEPS=2.D0)
 C >>>     SPHERE (OUTER SHELL SCATTERER) PERMITTIVITY                  <<<
 *  n(silica)=1.45  <--->    EPS(1)=2.1025D0
 *  n(ZnS)=2.       <--->    EPS(1)=4.D0
       PARAMETER (CSEPS=(1.45d0,0.d0)**2)
 c Host of spheres (background) dielectric constant
-      PARAMETER (EPS0=1.3D0**2)                  !1.4D0**2
+      PARAMETER (EPS0=1.D0**2)                  !1.4D0**2
 c dielectric constant of the left host:
-      PARAMETER (EPSL=(1.3D0,0.d0)**2)
+      PARAMETER (EPSL=(1.D0,0.d0)**2)
 C If you set up an appropriate interface component (IT=1) (see below)!!!
 c dielectric constant of the right host:
       PARAMETER (EPSR=(1.D0,0.d0))
 C If you set up an appropriate interface component (IT=1) (see below)!!!
 *
 c Quantities for the use of the material data
-      REAL*8 OMF(NFIN),omxf,omxp,omega,plasma,reepsz
-      COMPLEX*16 CEPS1(NFIN),zeps1,ci
+      REAL*8 omf(NFIN,NDM),omxf,omxp,omega,plasma,reepsz
+      COMPLEX*16 ceps1(NFIN,NDM),ZEPS1(NDM),ci
 c OMF is plasma/omega, CEPS1 contains the complex (sphere) EPS
-c
 *  
-C   C ..  SCALAR VARIABLES ..   C  
+C ..  SCALAR VARIABLES ..   C
       INTEGER      LMAX,I,IGKMAX,IGK1,IGK2,IGMAX,KTYPE,KSCAN,NCOMP,IG1  
       INTEGER      IG0,NUNIT,ICOMP,KEMB,IU,IP,IPL,IPLP,ILAYER,ILCSN
       INTEGER      IEPS,ISTEP,NSTEP,NBAS
@@ -272,7 +276,7 @@ C   C ..  SCALAR VARIABLES ..   C
 C  
 C ..  ARRAY VARIABLES ..  
 C    
-      INTEGER    NT1(IGD),NT2(IGD),IT(NCOMPD)  
+      INTEGER    NT1(IGD),NT2(IGD),IT(NCOMPD),NMAT(NDM),NDFIN(NDM)  
       INTEGER    NLAYER(NCOMPD),NPLAN(NCOMPD),ISTACK(NCOMPD)  
       REAL*8     ELM(NELMD),AK(2),VECMOD(IGD),DL(3,NCOMPD,NPLAND)  
       REAL*8     DR(3,NCOMPD,NPLAND),G(2,IGD),AR1(2),AR2(2),B1(2),B2(2) 
@@ -318,7 +322,21 @@ C
       EXTERNAL ELMGEN,LAT2D,PCSLAB,HOSLAB,PAIR,SCAT,BAND,REDUCE  
 C  
 C ..  DATA STATEMENTS ..  
-C  
+C 
+* material code number for the external data fields
+c   NMAT=0             dispersionless dielectric                              
+c   NMAT=1             Drude metal
+c   NMAT=2             Ag
+c   NMAT=3             Au
+c   NMAT=4             ZnS 
+c   NMAT=5             Cu
+c   NMAT=6             Al
+c   NMAT=7             Pt
+c   NMAT=8             Si 
+*
+      DATA NMAT/0/ 
+      DATA NDFIN/0/
+* 
       DATA PI/3.14159265358979D0/,EMACH/1.D-8/,EPSILON/0.D0/  
       DATA CZERO/(0.D0,0.D0)/,EINCID/IGKD*(0.D0,0.D0)/,VEC0/3*0.D0/ 
       DATA TEXT1/'HOMOGENEOUS PLATE','PHOTONIC CRYSTAL'/ 
@@ -331,17 +349,37 @@ CCCCCCCCCCCCCCCCCC    Assignement of common variables CCCCCCCCCCC
       DATA iplp/1/
       
 * If NAG library is available, set ICHOICE=1, otherwise ICHOICE=2
-
-      DATA ICHOICE/2/
-*      
-      DATA NP/-2/
 *
-      write(6,*)'Read nanowire length'
+      DATA ICHOICE/2/
+C
+C      RAT = 1 - particle size is specified in terms of the            
+C                equal-volume-sphere radius                             
+C      RAT.ne.1 - particle size is specified in terms of the           
+C                equal-surface-area-sphere radius
+*     
+      DATA RAT/1. D0/ 
+*      
+      DATA NP/-1/
+*
+* For spheres in NP=-1 alternative
+      DATA DEFP/1.000001D0/
+      dist=100.d0
+      rsnm=47.05d0
+* equivalent-(volume/surface-area)-sphere radius 
+*
+cc      write(6,*)'Read equal-volume-sphere radius in nm'
+cc      read(5,*) rev
+      rev=47.05d0
+c<<<
+c>>>
+*>>>finite cylinders:
+
+      if (np.eq.-2) then
+      write(6,*)'Read cylinder length'
       read(5,*) hlength 
 cc        hlength=20.d0              !500.d0
 
-
-      write(6,*)'Read nanowire diameter'
+      write(6,*)'Read cylinder diameter'
       read(5,*) rsnm
 cc        rsnm=50.d0                 !55.d0
       
@@ -352,24 +390,14 @@ cc        rsnm=50.d0                 !55.d0
 *     
       rsnm=rsnm/2.d0             !cylinder radius
       hlength=hlength/2.D0        !cylinder halflength
-*
-      write(6,*)'Read nanowire center-to-center distance'
+
+      write(6,*)'Read scatterer center-to-center distance in nm'
       read(5,*) dist
 cc       dist=220.d0                 !110.d0
-C
-C      RAT = 1 - particle size is specified in terms of the            
-C                equal-volume-sphere radius                             
-C      RAT.ne.1 - particle size is specified in terms of the           
-C                equal-surface-area-sphere radius
-*     
-      DATA RAT/1. D0/ 
-*
-* equivalent-(volume/surface-area)-sphere radius 
-*
-cc      write(6,*)'Read equal-volume-sphere radius in nm'
-cc      read(5,*) rev
 *
       rev=hlength/(2D0/(3D0*DEFP*DEFP))**(1D0/3D0)
+      
+      end if
 * 
       AXI=rev
 *
@@ -436,7 +464,7 @@ C  different NDGS-values are recommended.
       END IF     
 C  
        DATA KTYPE/1/   
-C     KTYPE=     1: THE DIRECTION OF AN INCIDENT  EM WAVE IS SPECIFIED  
+C     KTYPE=     1: THE DIRECTION OF AN INCIDENT EM WAVE IS SPECIFIED  
 C                   BY THE POLAR ANGLES OF INCIDENCE "THETA" AND "FI".  
 C                   THE PROGRAM CALCULATES THE TRANSMISSION,REFLECTION  
 C                   AND  ABSORPTION   COEFFICIENTS OF  A  FINITE  SLAB     
@@ -459,22 +487,25 @@ C                2: SCANNING OVER WAVELENGTHS
 C     KEMB=0        EMBEDDING MEDIUM ON THE LEFT AND RIGHT IDENTICAL
 C     KEMB=1        DIFFERENT EMBEDDING MEDIA ON THE LEFT AND RIGHT 
 
-      DATA LMAX/8/
+      DATA LMAX/4/
 C     LMAX        : THE ACTUAL CUTOFF IN SPHERICAL WAVES EXPANSIONS  
       DATA NBAS/1/
+C     NBAS        : THE ACTUAL NUMBER OF ATOMS PER UNIT CELL
+C cutoff on the number of scatterers per primitive cell set currently
+C  to NCMB=2 in pccslab* routines
 C=======================================================================  
 * Setting up the direct and reciprocal lattice  
       DATA ALPHA/1.d0/
 C     ALPHA       : LENGTH OF THE PRIMITIVE VECTOR OF THE TWO-DIMENSIONAL  
-C                   LATTICE  along the x-axis.
+C                   LATTICE along the x-axis.
 C                   IN PROGRAM UNITS THE SIZE OF ALPHA SERVES  
-C                   AS  THE UNIT LENGTH.  THUS  ALPHA MUST BE EQUAL TO  
+C                   AS THE UNIT LENGTH. THUS ALPHA MUST BE EQUAL TO
 C                   1.D0 
       DATA  ALPHAP/1.d0/
 C     ALPHAP      : LENGTH OF THE SECOND PRIMITIVE VECTOR OF THE
 C                   TWO-DIMENSIONAL LATTICE  
  
-      DATA RMAX/22.d0/
+      DATA RMAX/16.d0/
 C     RMAX        : UPPER LIMIT FOR THE LENGTH OF  RECIPROCAL  LATTICE  
 C                   VECTORS (IN UNITS OF 1/ALPHA) WHICH  MUST BE TAKEN  
 C                   INTO ACCOUNT. A larger value of RMAX has to be
@@ -488,8 +519,8 @@ C=======================================================================
 *
 * Setting scattering angles:
 *
-c      READ(10,204) AQ(1),AQ(2),POLAR,FEIN
 
+c      READ(10,204) AQ(1),AQ(2),POLAR,FEIN
  
       IF (KTYPE.GE.2) THEN  
       
@@ -498,24 +529,24 @@ c      READ(10,204) AQ(1),AQ(2),POLAR,FEIN
                                  
       ELSE IF (KTYPE.GE.1) THEN 
 
-      DATA THETA/0.d0/
+      DATA THETA/6.d0/    !THETA/AK(1) =   0.00159155
       DATA FI/0.d0/
 C             "THETA" AND "FI" ARE THE POLAR ANGLES (IN DEG) OF INCIDENCE 
 C             OF AN INCIDENT EM WAVE
+
+      THETA=asin(1.0000003575641670d-2/3.7d0)  ! THETA*PI/180.D0
+      FI=FI*PI/180.D0 
+      
       DATA POLAR/'S '/
 C     POLAR       : POLARIZATION OF THE INCIDENT LIGHT
 C                   'S ' (E parallel to the surface of the slab)
 C                   'P ' (E has a component perpendicular to the surface of
 C                                                                 the slab) 
- 
-      THETA=THETA*PI/180.D0  
-      FI=FI*PI/180.D0 
 
       WRITE(6,208) THETA,FI,POLAR                            
             
-                             ENDIF 
+                             ENDIF
 
-           
       DATA FEIN/0.d0/
 C     FEIN        : ANGLE  (IN DEG) SPECIFYING  THE DIRECTION  OF  THE  
 C                   POLARIZATION  VECTOR  FOR  NORMAL  INCIDENCE.  NOT  
@@ -532,14 +563,14 @@ C                   EFFECTIVE OTHERWISE
  
 *
 C  If $A=2$ is the side length of a conventional cubic unit cell
-C  (as in mine 3d calculations), the maximal sphere radius is $1.d0/sqrt(2.d0)$
+C  (as in my 3d calculations), the maximal sphere radius is $1.d0/sqrt(2.d0)$
 C  If conversion from BSC (band structure calc.) to R&T wanted
 C      rmuf= X d0 *sqrt(2.d0)
 C where X is the sphere radius in BSC
 **************************
 * RMUF = radius in lattice units
 *
-      rmuf=rsnm/dist       
+      rmuf=rsnm/dist
 *
 *           rmuf*zval*sqrt(eps0) is the size parameter here !!!
 * rsnm=rmuf*A(in nm)
@@ -556,12 +587,12 @@ C     NUNIT       : SPECIFIES THE NUMBER OF UNIT SLICES (2**(NUNIT-1))
 C                   OF THE SAMPLE. (THE UNIT SLICE FOR AN FCC LATTICE
 C                   IN (111) DIRECTION CONSISTS OF 3 NON-PRIMITIVE PLANES)
 C
-      DATA NCOMP/2/
+      DATA NCOMP/1/
 C The actual number of different elementary scattering components within a
 C unit slice. THE UNIT SLICE FOR AN FCC LATTICE IN (111) DIRECTION CONSISTS 
 C OF 1 COMPONENT OF 3 NON-PRIMITIVE PLANES. 
 *
-* Type of the component - either a homogeneous plane or a plane of spheres
+* Type of the component - either a homogeneous plane (=1) or a plane of spheres (=2)
 *
       DATA IT(1)/2/
       DATA IT(2)/1/
@@ -646,7 +677,7 @@ C=======================================================================
       DO 3 ICOMP=1,NCOMP  
 *
       IF(IT(ICOMP).LE.0.OR.IT(ICOMP).GT.2)  
-     &		    STOP 'ILLEGAL COMPONENT TYPE' 
+     &                STOP 'ILLEGAL COMPONENT TYPE' 
       WRITE(6,209) ICOMP,TEXT1(IT(ICOMP)) 
 * 
        IF(IT(ICOMP).EQ.1) THEN  
@@ -709,7 +740,7 @@ C                      =========================
         if (it(icomp).eq.2) then
             DL(1,icomp,1)=0.d0
             DL(2,icomp,1)=0.d0
-            DL(3,icomp,1)=hlength/dist     !hlength now pillar halflength
+            DL(3,icomp,1)=hlength/dist
             DR(1,icomp,1)=0.d0
             DR(2,icomp,1)=0.d0
             DR(3,icomp,1)=hlength/dist    
@@ -775,15 +806,16 @@ c      D(1)=lambda/(16.d0*1.4d0)
       D(ncomp)=0.D0
       D(1)=0.d0                   !hlength*2.D0/dist      !0.D0
 *
-      write(6,*)'Read diel. slab thickness in nm'
-	read(5,*) D(2)
-	D(2)=D(2)/dist
+ct      write(6,*)'Read diel. slab thickness in nm'
+ct     read(5,*) D(2)
+ct     D(2)=D(2)/dist
 *
-      EPS1(2)=eps0
-	write(6,*)'Read diel. slab refractive index'
-      read(5,*) EPS2(2)
-	EPS2(2)=EPS2(2)**2
-c	EPS1(ncomp)=EPS2(2)
+      EPS1(2)=epsl
+c      write(6,*)'Read diel. slab refractive index'
+c      read(5,*) EPS2(2)
+c      EPS2(2)=EPS2(2)**2
+      EPS2(2)=1.4d0
+c      EPS1(ncomp)=EPS2(2)
       EPS3(ncomp)=epsr
 *
 *************************************
@@ -801,8 +833,8 @@ clmax
       IF(LMAX.LE.0.OR.LMAX.GT.LMAXD)  
      &          STOP 'LMAX.LE.0.OR.LMAX.GT.LMAXD'           
       IF(NCOMP.LE.0.OR.NCOMP.GT.NCOMPD)  
-     &				   STOP 'ILLEGAL INPUT VALUE OF NCOMP'  
-      IF(NUNIT.LE.0)    	   STOP 'ILLEGAL INPUT VALUE OF NUNIT'
+     &                           STOP 'ILLEGAL INPUT VALUE OF NCOMP'  
+      IF(NUNIT.LE.0)             STOP 'ILLEGAL INPUT VALUE OF NUNIT'
 *
 *
 c      if (NSTACK.lt.0.or.NSTACK.gt.5) write(6,*)'Illegal value of 
@@ -822,7 +854,7 @@ c     & NSTACK'
       stop
       end if
 *
-      if (nmat.gt.1) then
+      if (NMAT(1).gt.1) then
         write(6,*)'Real material data are to be provided'
       if (ynbrug) write(6,*)'Bruggeman approx. used!'
       if (ynbrug) write(nout,*)'#Bruggeman approximation performed'
@@ -830,6 +862,17 @@ c     & NSTACK'
 *
 C======================================================================= 
 *  OUTPUT WRITING 
+
+      OPEN(UNIT=NOUT-1,FILE='zeffmg.dat')
+      rewind(NOUT-1) 
+
+      if (ynsz) then
+      OPEN(UNIT=NOUT-2,FILE='Dielf.dat')
+      rewind(NOUT-2) 
+      write(nout-2,*)'#Metal diel. function with size correction'
+      write(nout-2,*)
+      end if
+*
       OPEN(UNIT=NOUT,FILE='rtaAgcyl.dat')
       rewind(NOUT)
       write(nout,*)'#Calculation performed with LMAX=',lmax
@@ -900,10 +943,10 @@ C--------/---------/---------/---------/---------/---------/---------/--
          write(nout,*)'#TM or p-polarization'
       end if
 *
-      if (theta.ne.0.) then
+      if (theta.ne.0.d0) then
          write(nout,*)'#Angle of incidence in [pi]:',THETA
       end if
-      if (fi.ne.0.) then
+      if (fi.ne.0.d0) then
          write(nout,*)'#Polar angle of incidence in [pi]:',FI
       end if
 *
@@ -930,14 +973,14 @@ c       write(nout,*)'#Spheres of Ag core-n_s=2 shell, rff=0.38'
       write(nout,*)'#host dielectric constant=', eps0
 C--------/---------/---------/---------/---------/---------/---------/--
       IF(.NOT.YNPERFCON) THEN
-       write(nout,*)'#Material number =',NMAT
+       write(nout,*)'#Material number =',NMAT(1)
       ELSE
        write(nout,*)'#Perfect conductor'
       END IF
 *
 *write(nout,*)'#Ag bulk data'
       if(ync.eq.'y') then
-        if (nmat.gt.0) then
+        if (NMAT(1).gt.0) then
         write(nout,*)'#The sphere component with material=',ilcs
         if (ilcs.gt.1) write(nout,*)'#sphere core diel. const.=',cceps
         if (ilcs.eq.1) write(nout,*)'#shell diel. const.=',cseps
@@ -946,7 +989,7 @@ C--------/---------/---------/---------/---------/---------/---------/--
         write(nout,*)'#shell diel. constant=',cseps
         end if
       else
-      if(nmat.eq.0) write(nout,*)'#sphere core diel. constant=',cceps
+      if(NMAT(1).eq.0) write(nout,*)'#sphere core diel. constant=',cceps
       end if
 *
       if (ynbrug) write(6,*)'Bruggeman approximation performed'
@@ -957,7 +1000,7 @@ C--------/---------/---------/---------/---------/---------/---------/--
       do icomp=1,ncomp
       write(nout,*)'#ICOMP=', ICOMP
       write(nout,*)'#NLAYER=', NLAYER(ICOMP),',',' NPLAN=',NPLAN(ICOMP)
-        IF((IT(ICOMP).EQ.1).and.(D(icomp).ne.0)) THEN 
+        IF((IT(ICOMP).EQ.1).and.(D(icomp).ne.0.d0)) THEN
           write(nout,*)'#D(icomp)=',D(icomp)
           write(nout,*)'#EPS2(icomp)=',EPS2(icomp) 
         END IF      
@@ -1038,7 +1081,7 @@ C--------/---------/---------/---------/---------/---------/---------/--
          write(40,*)'#TM or p-polarization'
       end if
 *
-      if (theta.ne.0.) then
+      if (theta.ne.0.d0) then
          write(40,*)'#Angle of incidence in [pi]:',THETA
       end if
       if (fi.ne.0.) then
@@ -1068,14 +1111,14 @@ c       write(40,*)'#Spheres of Ag core-n_s=2 shell, rff=0.38'
       write(40,*)'#host dielectric constant=', eps0
 C--------/---------/---------/---------/---------/---------/---------/--
       IF(.NOT.YNPERFCON) THEN
-       write(40,*)'#Material number =',NMAT
+       write(40,*)'#Material number =',NMAT(1)
       ELSE
        write(40,*)'#Perfect conductor'
       END IF
 *
 *write(40,*)'#Ag bulk data'
       if(ync.eq.'y') then
-        if (nmat.gt.0) then
+        if (NMAT(1).gt.0) then
         write(40,*)'#The sphere component with material=',ilcs
         if (ilcs.gt.1) write(40,*)'#sphere core diel. const.=',cceps
         if (ilcs.eq.1) write(40,*)'#shell diel. const.=',cseps
@@ -1084,7 +1127,7 @@ C--------/---------/---------/---------/---------/---------/---------/--
         write(40,*)'#shell diel. constant=',cseps
         end if
       else
-      if(nmat.eq.0) write(40,*)'#sphere core diel. constant=',cceps
+      if(NMAT(1).eq.0) write(40,*)'#sphere core diel. constant=',cceps
       end if
 *
       if (ynbrug) write(6,*)'Bruggeman approximation performed'
@@ -1141,13 +1184,13 @@ C=======================================================================
       STOP
       ENDIF
       STOP
-		    ENDIF  
-		     ELSE 
+                ENDIF  
+                 ELSE 
 c >>> band structure:
       READ(10,*) DUMMY,(AL(I),I=1,3) 
       WRITE(6,*)'THE BAND STRUCTURE PRAMATERS NOT YET SPECIFIED!'
       STOP
-		     ENDIF  
+                 ENDIF  
 *
  
       CALL ELMGEN(ELM,NELMD,LMAX)  
@@ -1210,9 +1253,9 @@ C                   THUS ZVAL  here is related to OMEGA in BSC by
 C                             ZVAL=OMEGA_{BSC}*sqrt(2.d0)
 c                     lambda=2.d0*pi*rsnm/(zval*rmuf)
 c      ZINF=1.4d0
-      ZINF=2.d0*pi*rsnm/(1300.d0*rmuf)  !1.469923168
+      ZINF=2.d0*pi*rsnm/(1000.d0*rmuf)  !1.469923168
 c      ZSUP=3.5d0
-      ZSUP=2.d0*pi*rsnm/(280.d0*rmuf)   !3.322821292
+      ZSUP=2.d0*pi*rsnm/(100.d0*rmuf)   !3.322821292
 c      ZINF=0.8d0*sqrt(2.d0)
 c      ZSUP=4.d0*sqrt(2.d0)
 c
@@ -1221,73 +1264,33 @@ c      1910                 Gold
 c      1910                 Copper
 c      2030                 Aluminium
 c
-      NSTEP=200
+      NSTEP=2
 C     NSTEP          : NUMBER OF EQUALLY SPACED POINTS BETWEEN ZINF, ZSUP   * 
       IF(NSTEP.LE.1)        STOP 'ILLEGAL INPUT VALUE OF  NSTEP ' 
 C >>> elementary step on the scanning interval:
       ZSTEP=(ZSUP-ZINF)/DBLE(NSTEP-1) 
 C************************************************************
 
-      if ((nmat.le.1).or.(ynperfcon)) goto 52       ! goto frequency loop
+      if ((NMAT(1).le.1).or.(ynperfcon)) goto 52       ! goto frequency loop
 
-* Sphere optical constants in the case of a dispersion
+* Scatterer optical constants in the case of a dispersion
 * READING IN MATERIAL  DATA:
-* Reading real silver data according to Palik's  book
-* requires reading data files OMF and CEPS1 of dimension NFIN
-* OMF is reepsz/omega and CEPS1 contains the sphere EPS
-*                       material constant reading:
 *
-      if (nmat.eq.2) then            ! silver data
-      OPEN(UNIT=30,FILE='agc.dat')           
-      rewind(30)
-        do ieps=1,nfin
-          read(30,*) omf(ieps),ceps1(ieps)
-        enddo
-       close(30)
-       
-      else if (nmat.eq.3) then        ! Gold data 
+      if (nmat(1).ge.1) then
 
-c      OPEN(UNIT=30,FILE='Au293Knew.dat')       !Gold data for different T
-      OPEN(UNIT=30,FILE='Audat.dat')          !Gold data in nm
-      write(6,*)'Gold particles'
-      rewind(30)
-        do ieps=1, nfin
-          read(30,*) omf(ieps),ceps1(ieps)
-c          omf(ieps)=2.d0*pi*rsnm*omf(ieps)/(1240.d0*rmuf)
-          omf(ieps)=2.d0*pi*rsnm/(omf(ieps)*rmuf)
-        enddo
-       close(30)
-
-cc      else if (nmat.eq.4) then          
-      
-      else if (nmat.eq.5) then        ! Copper data
-
-      OPEN(UNIT=30,FILE='Cudat.dat')          !Copper data in nm
-      write(6,*)'Copper particles'
-      rewind(30)      
-        do ieps=1, nfin
-          read(30,*) omf(ieps),ceps1(ieps)
-          omf(ieps)=2.d0*pi*rsnm/(omf(ieps)*rmuf)
-        enddo      
-      close(30)     
-
-      else if (nmat.eq.6) then        ! Aluminium data 
-
-      OPEN(UNIT=30,FILE='Aldat.dat')          !Aluminium data in nm
-      write(6,*)'Aluminum particles'
-      rewind(30)      
-        do ieps=1, nfin
-          read(30,*) omf(ieps),ceps1(ieps)
-          omf(ieps)=2.d0*pi*rsnm/(omf(ieps)*rmuf)
-        enddo      
-      close(30) 
+      do idm=1,ndm
+      call readmat(nmat(idm),ndfin(idm),rsnm,rmuf,omf(1,idm),
+     & ceps1(1,idm))
+      enddo
             
       end if                      ! material constant reading      
 
 *********************
 
- 52   ZVAL0=ZINF-ZSTEP  
- 
+ 52   ZVAL0=3.7d0  !0.3 d0  !3.7d0
+      ZSTEP=.1d0/dble(nstep)  !0.7d0/dble(nstep)  !
+      ZVAL0=ZVAL0-ZSTEP
+
       DO 300 ISTEP=1,NSTEP   ! SCANNING OVER FREQUENCIES/WAVELENGTHS
 
       ZVAL=ZVAL0+ISTEP*ZSTEP  
@@ -1314,121 +1317,25 @@ C                A=sqrt(2.d0)*ALPHA)
 
       write(6,*) 'Lambda in vacuum=', lambda
 
-      if (nmat.eq.0) goto 80       ! dispersionless dielectric
+      if (NMAT(1).eq.0) goto 80       ! dispersionless dielectric
 
 * In case of a dispersion, EPSSPH is modified.
-* For ideal Drude metal
-*     plasma=2.d0*pi*sphere radius in nm/(lambda_z in nm*rmuf)
-* where lambda_z is the wavelength for which Re eps_s=0.
 
-       reepsz=2.d0*pi*RSNM/(323.83d0*rmuf)
+      do idm=1,ndm
 
-      if (nmat.eq.1) then              ! Drude metal
-
-      plasma=reepsz
-        omxp=plasma/omega
-        zeps1=1.d0-omxp**2/(1.d0+ci*plasma/(144.d0*omega))
-      go to 78
-      end if   
-*
-      if (nmat.eq.2) then             ! Ag
-
-c >>> real material data:           !silver 
-*                         lambda_z=323.83d0
-*                         lambda_p=164.d0
-* When real material data are used, 
-* reepsz differs from plasma!!! The plasma wavelength is 
-* calculated below: 
-
-       plasma=reepsz*7.2d0/3.8291d0
-
-* security trap - remainder (not optimized!)
-      omxf=omega/reepsz
-      if (omxf.gt.omf(1)) then
-       write(6,*)'Calculation of has to stop with'
-       write(6,*)' OMF(1)'
-       write(6,*)' OMXF=', omxf
-       stop
-      end if
-
-      if (omxf.lt.omf(nfin)) then
-        omxp=plasma/omega
-        zeps1=1.d0-omxp**2/(1.d0+ci*plasma/(144.d0*omega))
-* damping coefficient for silver is plasma/144 where plasma is different from
-* the Re eps zero crossing at 3.8291 eV according to Palik!!!
-       go to 78
-      else if (omxf.eq.omf(1)) then
-       zeps1=ceps1(1)
-       go to 78
-      else
-      do ieps=2,nfin
-* data file ordered with the increased wavelength
-* omxf increases in the loop and is oriented opposite to the data file
-       if (omxf.gt.omf(ieps)) then     ! linear interpolation
-       zeps1=ceps1(ieps)+(omxf-omf(ieps))*(ceps1(ieps-1)-ceps1(ieps))
-     1 /(omf(ieps-1)-omf(ieps))
-       go to 78
-       end if 
+      call mediumn(ynsz,ynbrug,ynmg,nmat(idm),ndfin(idm),omega,lambda,
+     &              rmuf,rsnm,omf(1,idm),ceps1(1,idm),zeps1(idm))
       enddo
-       end if 
-       end if              ! end Ag
-*
-
-      if ((nmat.eq.3).or.(nmat.eq.5).or.(nmat.eq.6)) then   !Au,Cu,Al
-
-c >>> real gold data:
-* data file ordered with the decreased wavelength
-* omega increases in the loop and is oriented along the data file
-*
-      if ( (omega.lt.omf(1)).or.(omega.gt.omf(nfin)) ) then
-cc       write(6,*)'Material data not available for this wavelength'
-cc       stop
-*
-      call sordalc(NMAT,lambda,ZEPS1)
-      go to 78
-*
-      end if
-*
-      if (omega.eq.omf(nfin)) then
-       zeps1=ceps1(nfin)
-       go to 78
-      else 
-      do ieps=1,nfin-1
-       if (omega.lt.omf(ieps+1)) then     ! linear interpolation
-       zeps1=ceps1(ieps)+(omega-omf(ieps))*(ceps1(ieps+1)-ceps1(ieps))
-     1 /(omf(ieps+1)-omf(ieps))
-       go to 78
-       end if 
-      enddo
-      end if
-       end if                  ! end Au,Cu,Al
 
 *The end of reading real data according to Palik's  book   
 *______________________________________
 
-******
-* If a homogeneous slab NMAT.ne.0
-c  78  continue
-c      EPS2(1)=zeps1
-******
-* activate Bruggeman:
-  78  if (ynbrug) then
-      ff=0.8d0 
-      z1 = (3.d0*ff-1.d0)*zeps1+(2.d0 - 3.d0*ff)*eps0
-      z2 =  sqrt(z1*z1 + 8.d0*zeps1*eps0)
-*
-       if (IMAG(z2).GE.0.0) then
-         zeps1= (z1 + z2)/4.d0
-       else            
-         zeps1= (z1 - z2)/4.d0
-       end if
-       end if
-
-* If spheres NMAT.ne.0
+* If NMAT.ne.0
       DO ICOMP=1,NCOMP 
        DO IPL=1,NPLAN(ICOMP)  
         if(it(icomp).eq.2) then
-        EPSSPH(icomp,ipl)=zeps1
+        if (NMAT(1).eq.0) EPSSPH(icomp,ipl)=CCEPS
+        if (NMAT(1).gt.0) EPSSPH(icomp,ipl)=zeps1(1)
         endif
        enddo
       enddo
@@ -1438,12 +1345,12 @@ c      EPS2(1)=zeps1
                                              IF(KTYPE.EQ.1) THEN  
                            AK(1)=DBLE(KAPIN)*SIN(THETA)*COS(FI)  
                            AK(2)=DBLE(KAPIN)*SIN(THETA)*SIN(FI) 
-			   DO 50 I=1,IGKMAX 
-			   EINCID(I)=CZERO 
+                     DO 50 I=1,IGKMAX 
+                     EINCID(I)=CZERO 
   50                       CONTINUE 
-							    ELSE 
-                           AK(1)=AQ(1) 
-			   AK(2)=AQ(2) 
+                                              ELSE 
+                     AK(1)=AQ(1)
+                     AK(2)=AQ(2) 
                                                            ENDIF  
       IF(KTYPE.NE.3) THEN !DEFINE THE POLARIZATION VECTOR FROM "AK"***** 
       AKXY=AK(1)*AK(1)+AK(2)*AK(2)  
@@ -1460,7 +1367,7 @@ c      EPS2(1)=zeps1
    21 CONTINUE 
                      ELSE 
       CALL REDUCE(AR1,AR2,AK,IGMAX,G,IG0,EMACH)   !"AK" IN SBZ*******  
-		     ENDIF     
+                 ENDIF     
 C  
 C****** CONSTRUCT THE TRANSFER MATRIX OF THE UNIT SLICE ******  
 C  
@@ -1489,27 +1396,31 @@ C
       EFIRST=EPS1(1)  
       RAP=S(1,1)*KAPPA0/2.D0/PI          !=rsnm/LAMBDA
 *
-      CALL PCCSLABC(YNC,LMAX,IGMAX,NBAS,RAP,EPS1(1),EPSSPH(1,1),MU1(1)  
-     &        ,MUSPH(1,1),KAPPA,AK,DL(1,1,1),DR(1,1,1),G,A0,EMACH,  
-     &		 QIL,QIIL,QIIIL,QIVL)
+!      CALL PCSLAB(YNC,LMAX,IGMAX,RAP,EPS1(1),EPSSPH(1,1),MU1(1)
+!     &     ,MUSPH(1,1),KAPPA,AK,DL(1,1,1),DR(1,1,1),G,ELM,A0,EMACH,
+!     &     QIL,QIIL,QIIIL,QIVL)
+
+      CALL PCCSLABC(YNC,LMAX,IGMAX,NBAS,A0,EMACH,RAP,EPS1(1)
+     &  ,EPSSPH(1,1),MU1(1),MUSPH(1,1),KAPPA,AK,DL(1,1,1),DR(1,1,1)
+     &     ,G,QIL,QIIL,QIIIL,QIVL)
 *
 *--------/---------/---------/---------/---------/---------/---------/--
       IF(NPLAN(1).GE.2) THEN  
       DO 13 IPL=2,NPLAN(1)  
       RAP=S(1,IPL)*KAPPA0/2.D0/PI  
 *
-      CALL PCCSLABC(YNC,LMAX,IGMAX,NBAS,RAP,EPS1(1),EPSSPH(1,IPL), 
-     &     MU1(1),MUSPH(1,IPL),KAPPA,AK,DL(1,1,IPL),DR(1,1,IPL),  
-     &           G,A0,EMACH,QIR,QIIR,QIIIR,QIVR) 
+      CALL PCCSLABC(YNC,LMAX,IGMAX,NBAS,A0,EMACH,RAP,EPS1(1)
+     &   ,EPSSPH(1,IPL), MU1(1),MUSPH(1,IPL),KAPPA,AK,DL(1,1,IPL)  
+     &   ,DR(1,1,IPL),G,QIR,QIIR,QIIIR,QIVR) 
 * 
       CALL PAIR(IGKMAX,QIL,QIIL,QIIIL,QIVL,QIR,QIIR,QIIIR,QIVR) 
    13 CONTINUE  
-			ENDIF  
+                  ENDIF  
       IF(NLAYER(1).GE.2) THEN
       DO 14 ILAYER=1,NLAYER(1)-1  
       CALL PAIR(IGKMAX,QIL,QIIL,QIIIL,QIVL,QIL,QIIL,QIIIL,QIVL)  
    14 CONTINUE  
-			 ENDIF  
+                   ENDIF  
                       ENDIF  
                       
       IF(NCOMP.GE.2) THEN              !FURTHER COMPONENTS
@@ -1522,7 +1433,7 @@ C
       KAPPASL=SQRT(MU2(ICOMP)*EPS2(ICOMP))*KAPPA0  
       KAPPAR =SQRT(MU3(ICOMP)*EPS3(ICOMP))*KAPPA0  
       KAPR=KAPPAR  
-c	write(6,*) 'MU1(ICOMP)-MLAST=',  ABS(MU1(ICOMP)-MLAST)
+c      write(6,*) 'MU1(ICOMP)-MLAST=',  ABS(MU1(ICOMP)-MLAST)
 c     write(6,*) 'EPS1(ICOMP)-ELAST=', ABS(EPS1(ICOMP)-ELAST)
 
       IF(ABS(MU1(ICOMP)-MLAST).GT.5.D-16.OR.ABS(EPS1(ICOMP)-ELAST).GT. 
@@ -1547,48 +1458,51 @@ c     write(6,*) 'EPS1(ICOMP)-ELAST=', ABS(EPS1(ICOMP)-ELAST)
 *  of spheres cut by a plane and the remaining layer having
 *  regular spheres
 *
-*                 
-      CALL PCCSLABC(YNC,LMAX,IGMAX,NBAS,RAP,EPS1(ICOMP),EPSSPH(ICOMP,1)  
-     &          ,MU1(ICOMP),MUSPH(ICOMP,1),KAPPA,AK,DL(1,ICOMP,1),  
-     &           DR(1,ICOMP,1),G,A0,EMACH,QIR,QIIR,QIIIR,QIVR)
-
+*
+      CALL PCCSLABC(YNC,LMAX,IGMAX,NBAS,A0,EMACH,RAP,EPS1(ICOMP)
+     &   ,EPSSPH(ICOMP,IPL), MU1(ICOMP),MUSPH(ICOMP,IPL),KAPPA,AK
+     &  ,DL(1,ICOMP,IPL),DR(1,ICOMP,IPL),G,QIR,QIIR,QIIIR,QIVR) 
 * 
 *--------/---------/---------/---------/---------/---------/---------/--
       IF(NPLAN(ICOMP).GE.2) THEN
         
-	     DO 17 IGK1=1,IGKMAX  
-	     DO 17 IGK2=1,IGKMAX  
-	     WIL  (IGK1,IGK2)=QIR  (IGK1,IGK2)  
-	     WIIL (IGK1,IGK2)=QIIR (IGK1,IGK2)  
-	     WIIIL(IGK1,IGK2)=QIIIR(IGK1,IGK2)  
-	     WIVL (IGK1,IGK2)=QIVR (IGK1,IGK2)  
+           DO 17 IGK1=1,IGKMAX  
+           DO 17 IGK2=1,IGKMAX  
+           WIL  (IGK1,IGK2)=QIR  (IGK1,IGK2)  
+           WIIL (IGK1,IGK2)=QIIR (IGK1,IGK2)  
+           WIIIL(IGK1,IGK2)=QIIIR(IGK1,IGK2)  
+           WIVL (IGK1,IGK2)=QIVR (IGK1,IGK2)  
    17        CONTINUE  
    
       DO 15 IPL=2,NPLAN(ICOMP)  
       RAP=S(ICOMP,IPL)*KAPPA0/2.D0/PI  
-*
-      CALL PCCSLABC(YNC,LMAX,IGMAX,NBAS,RAP,EPS1(ICOMP),  
-     &          EPSSPH(ICOMP,IPL),MU1(ICOMP),MUSPH(ICOMP,IPL),KAPPA,AK,  
-     &           DL(1,ICOMP,IPL),DR(1,ICOMP,IPL),G,A0,EMACH,  
-     &           QIR,QIIR,QIIIR,QIVR)
-*
+
+      CALL PCCSLABC(YNC,LMAX,IGMAX,NBAS,A0,EMACH,RAP,EPS1(ICOMP)
+     &   ,EPSSPH(ICOMP,IPL), MU1(ICOMP),MUSPH(ICOMP,IPL),KAPPA,AK
+     &  ,DL(1,ICOMP,IPL),DR(1,ICOMP,IPL),G,QIR,QIIR,QIIIR,QIVR) 
+
       CALL PAIR(IGKMAX,WIL,WIIL,WIIIL,WIVL,QIR,QIIR,QIIIR,QIVR) 
+
    15 CONTINUE  
-	     DO 18 IGK1=1,IGKMAX  
-	     DO 18 IGK2=1,IGKMAX  
-	     QIR  (IGK1,IGK2)=WIL  (IGK1,IGK2)  
-	     QIIR (IGK1,IGK2)=WIIL (IGK1,IGK2)  
-	     QIIIR(IGK1,IGK2)=WIIIL(IGK1,IGK2)  
-	     QIVR (IGK1,IGK2)=WIVL (IGK1,IGK2)  
+           DO 18 IGK1=1,IGKMAX  
+           DO 18 IGK2=1,IGKMAX  
+           QIR  (IGK1,IGK2)=WIL  (IGK1,IGK2)  
+           QIIR (IGK1,IGK2)=WIIL (IGK1,IGK2)  
+           QIIIR(IGK1,IGK2)=WIIIL(IGK1,IGK2)  
+           QIVR (IGK1,IGK2)=WIVL (IGK1,IGK2)  
    18        CONTINUE  
-			ENDIF  
+                  ENDIF  
       IF(NLAYER(ICOMP).GE.2) THEN  
-      DO 16 ILAYER=1,NLAYER(ICOMP)-1  
-      CALL PAIR(IGKMAX,QIR,QIIR,QIIIR,QIVR,QIR,QIIR,QIIIR,QIVR)  
+      DO 16 ILAYER=1,NLAYER(ICOMP)-1 
+ 
+      CALL PAIR(IGKMAX,QIR,QIIR,QIIIR,QIVR,QIR,QIIR,QIIIR,QIVR) 
+ 
    16 CONTINUE  
-			 ENDIF  
+                   ENDIF  
                       ENDIF  
+
       CALL PAIR(IGKMAX,QIL,QIIL,QIIIL,QIVL,QIR,QIIR,QIIIR,QIVR)  
+
     4 CONTINUE  
                                                                    ENDIF  
       IF(KTYPE.LT.3) THEN  
@@ -1598,29 +1512,39 @@ C****** DOUBLING-LAYER  TECHNIQUE, INTERFACES CAN BE ADDED AND ******
 C****** REFLECTIVITY/TRANSMITTANCE/ABSORBANCE ARE CALCULATED.  ******  
 C 
              IF(NUNIT.EQ.1) GO TO 30 
-	     IF(ABS(MLAST-MFIRST).NE.0.D0.OR.ABS(ELAST-EFIRST).NE.0.D0) 
+           IF(ABS(MLAST-MFIRST).NE.0.D0.OR.ABS(ELAST-EFIRST).NE.0.D0) 
      &       STOP 'IMPROPER MATCHING OF SUCCESSIVE HOST MEDIA' 
-	     DO 9 IU=1,NUNIT-1  
+           DO 9 IU=1,NUNIT-1 
+ 
              CALL PAIR(IGKMAX,QIL,QIIL,QIIIL,QIVL,QIL,QIIL,QIIIL,QIVL)   
+
     9        CONTINUE  
    30        CONTINUE  
              IF(KEMB.EQ.1) THEN 
-             CALL HOSLAB(IGMAX,KAPR,(KAPR+KAPOUT)/2.D0,KAPOUT,AK,G,VEC0,  
-     &                   VEC0,0.D0,QIR,QIIR,QIIIR,QIVR,EMACH)  
-	     CALL PAIR(IGKMAX,QIL,QIIL,QIIIL,QIVL,QIR,QIIR,QIIIR,QIVR)  
-	     DO 11 IGK1=1,IGKMAX  
-	     DO 11 IGK2=1,IGKMAX  
-	     QIR  (IGK1,IGK2)=QIL  (IGK1,IGK2)  
-	     QIIR (IGK1,IGK2)=QIIL (IGK1,IGK2)  
-	     QIIIR(IGK1,IGK2)=QIIIL(IGK1,IGK2)  
-	     QIVR (IGK1,IGK2)=QIVL (IGK1,IGK2)  
-   11        CONTINUE  
+
+           CALL HOSLAB(IGMAX,KAPR,(KAPR+KAPOUT)/2.D0,KAPOUT,AK,G,VEC0,  
+     &                   VEC0,0.D0,QIR,QIIR,QIIIR,QIVR,EMACH)
+  
+           CALL PAIR(IGKMAX,QIL,QIIL,QIIIL,QIVL,QIR,QIIR,QIIIR,QIVR) 
+ 
+           DO 11 IGK1=1,IGKMAX  
+           DO 11 IGK2=1,IGKMAX  
+           QIR  (IGK1,IGK2)=QIL  (IGK1,IGK2)  
+           QIIR (IGK1,IGK2)=QIIL (IGK1,IGK2)  
+           QIIIR(IGK1,IGK2)=QIIIL(IGK1,IGK2)  
+           QIVR (IGK1,IGK2)=QIVL (IGK1,IGK2)  
+   11        CONTINUE
+  
              CALL HOSLAB(IGMAX,KAPIN,(KAPL+KAPIN)/2.D0,KAPL,AK,G,VEC0,  
      &                   VEC0,0.D0,QIL,QIIL,QIIIL,QIVL,EMACH)  
-	     CALL PAIR(IGKMAX,QIL,QIIL,QIIIL,QIVL,QIR,QIIR,QIIIR,QIVR)  
-					  ENDIF 
-             CALL SCAT(IGMAX,ZVAL,AK,G,DBLE(KAPIN),DBLE(KAPOUT),
+
+           CALL PAIR(IGKMAX,QIL,QIIL,QIIIL,QIVL,QIR,QIIR,QIIIR,QIVR)  
+
+                                ENDIF 
+
+           CALL SCAT(IGMAX,ZVAL,AK,G,DBLE(KAPIN),DBLE(KAPOUT),
      &                 EINCID,QIL,QIIIL)  
+
                      ELSE  
 C  
 C****** ALTERNATIVELY, CALCULATE COMPLEX PHOTONIC BAND STRUCTURE ******  
@@ -1727,8 +1651,8 @@ C ..  PARAMETER STATEMENTS ..
 C 
       INTEGER   IGD,IGKD
       logical ynphase 
-      PARAMETER (IGD=37,IGKD=2*IGD)  
-      PARAMETER (ynphase=.true.)      ! true only if reflection phase
+      PARAMETER (IGD=37,IGKD=2*IGD)
+      PARAMETER (ynphase=.false.)      ! true only if reflection phase
 *                                       is required      
 C  
 C ..  SCALAR ARGUMENTS  ..  
@@ -1894,7 +1818,7 @@ C      STOP
       WRITE(8,*)'ABSORPTION=',ABSOR ,'IS NEGATIVE!'
 c      pause
       END IF
-      WRITE(8,101)  TRANS,REFLE,ABSOR  
+      WRITE(8,101)  ZVAL,TRANS,REFLE,ABSOR  
       WRITE(6,101)  ZVAL,TRANS,REFLE,ABSOR  
       RETURN  
 C  
@@ -1940,7 +1864,7 @@ C
 C  .. PARAMETER STATEMENTS ..  
 C  
       INTEGER IGD,IGKD  
-      PARAMETER (IGD=37,IGKD=2*IGD)  
+      PARAMETER (IGD=37,IGKD=2*IGD)
 C  
 C  .. SCALAR ARGUMENTS ..  
 C  
@@ -2049,12 +1973,12 @@ C
 *
       CQI  =EXP(CI*((AK(1)+G(1,IG1))*(DL(1)+DR(1))+  
      &              (AK(2)+G(2,IG1))*(DL(2)+DR(2))+  
-     &	             GKKZ1*DL(3)+GKKZ3*DR(3)))  
+     &                   GKKZ1*DL(3)+GKKZ3*DR(3)))  
       CQII =EXP(CTWO*CI*GKKZ3*DR(3))  
       CQIII=EXP(CTWO*CI*GKKZ1*DL(3))  
       CQIV =EXP(-CI*((AK(1)+G(1,IG1))*(DL(1)+DR(1))+  
      &               (AK(2)+G(2,IG1))*(DL(2)+DR(2))-  
-     &	             GKKZ1*DL(3)-GKKZ3*DR(3)))  
+     &                   GKKZ1*DL(3)-GKKZ3*DR(3)))  
 * actual assignement:
 *
       DO 7 JA=1,2  
@@ -2681,8 +2605,8 @@ C     <<<  AE,AH ORDERED FROM (LM)=(00)=1, ETC.
 C                           WITH AE(*,1) AND AH(*,1).EQUIV.0
 C     ==========
 C     THIS ROUTINE CALCULATES THE EXPANSION COEFFICIENTS 'AE,AH' OF AN  
-C     INCIDENT PLANE ELECTROMAGNETIC WAVE OF WAVE VECTOR  'KAPPA' WITH  
-C     COMPONENTS PARALLEL TO THE SURFACE EQUAL TO   '(GK(1),GK(2))'
+C     INCIDENT ELECTROMAGNETIC PLANE WAVE OF WAVE VECTOR  'KAPPA' WITH  
+C     COMPONENTS PARALLEL TO THE SURFACE EQUAL TO '(GK(1),GK(2))'
 C     IN SPHERICAL COORDINATES ACCORDING TO EQS. (19-20) OF 
 C     CPC 132, 189 (2000)].  
 C    
@@ -3065,19 +2989,20 @@ C=======================================================================
       SUBROUTINE TMTRXN(YNC,LMAX,RAP,CSPHEPS,CMEDEPS,CMEDMU,CSPHMU,
      + TE,TH)  
 *--------/---------/---------/---------/---------/---------/---------/--
-C >>> YNC,LMAX,RAP,CSPHEPS,CMEDEPS,CMEDMU,CSPHMU
+C >>> YNC,LMAX=LMAX1D,RAP,CSPHEPS,CMEDEPS,CMEDMU,CSPHMU
 C <<< TE,TH
 C ==========
 C     TH     : -i*\sg t_{M}    
-C     TH     : -i*\sg t_{E}    = i*sin(eta)*exp(eta), eta ... phase-shift
+C     TH     : -i*\sg t_{E}    = i*sin(eta)*exp(i*eta), eta ... phase-shift
 C !!! Note the following ordering: 
 C !!! TH(L) corresponds to the T matrix component with angular-momentum L-1 !!! 
 C !!!                [The same for TE(L)]
-C     Therefore, for a given LMAX, TH and TE are produced up to
-C     LMAX+1 here!!!
+C     Therefore, for a given LMAX, TH(L) and TE(L) are produced up to
+C     physical L=LMAX-1 here!!!
+C     TH(1) and TE(1) are not assigned
 C ==========
 C     THIS SUBROUTINE RETURNES THE FIRST LMAX ELEMENTS OF THE T-MATRIX
-C     FOR THE SCATTERING  OF ELECTROMAGNETIC FIELD OF WAVE-LENGHT LAMDA 
+C     FOR THE SCATTERING  OF ELECTROMAGNETIC FIELD OF WAVE-LENGTH LAMDA 
 C     BY A SINGLE SPHERE OF RADIUS S.  
 C     YNC=y if sphere is coated, otherwise ync=n
 C     LMAX   : MAXIMUM ANGULAR MOMENTUM - CALLED WITH LMAXD1 !!!
@@ -3111,7 +3036,7 @@ C     ------------------------------------------------------------------
 * ynperfcon=.true. if core is a perfect conductor, otherwise
 * ynperfcon=.false.
 *
-* LMAXD is the local LMAX
+* LMAXD in the main is here the local LMAX-1
 *
       PARAMETER (LMAXD=8)
 *
@@ -3128,7 +3053,6 @@ C     ------------------------------------------------------------------
       COMPLEX*16 ey,cqeps(2),cceps,cseps
       COMPLEX*16 RX(2),SG(2),ZEPS(lcs+1)
       COMPLEX*16 TE(LMAX),TH(LMAX)
-
 *
 * coated sphere declarations:
 *                    moving lmax ===>
@@ -3152,7 +3076,7 @@ C     ------------------------------------------------------------------
 C   
 C     READING THE DATA :
       DATA ey/(0.D0,1.D0)/,PI/3.14159265358979D0/ 
-      LMAXM1=LMAX-1
+      LMAXM1=LMAX-1       !=LMAXD in the main
 
 *
 *                      security    trap  - remainder
@@ -3351,7 +3275,7 @@ C     ASSIGNING VALUES TO ELEMENTS OF THE K-MATRIX
 C >>>
   30  CONTINUE
 *
-      DO 40 L=1,LMAXM1
+      DO 40 L=1,LMAXM1   != the physical values of l
 
 * In the following, one needs only phase shifts:
 *                        B/A  yields -tan(phase shift)
@@ -3382,11 +3306,15 @@ C
 C        -CI*SIGMA*TMAT*(CI/SIGMA)*G_{LL'}=TMAT*G_{LL'}
 C 
 C                               AS IT SHOULD BE.    
-C     XMAT CALCULATES THE MATRIX DESCRIBING MULTIPLE SCATERING  WITHIN   
-C     A  LAYER, RETURNING  IT AS :  XODD,  CORRESPONDING  TO  ODD  L+M,  
-C     WITH LM=(10),(2-1),(21),... AND XEVEN, CORRESPONDING TO EVEN L+M, 
-C     WITH LM=(00),(1-1),(11),(2-2),(20),(22),...  
-C     THE  PROGRAM  ASSUMES  THAT  THE  LAYER IS A BRAVAIS LATTICE. THE  
+!     XMAT CALCULATES THE MATRIX OF STRUCTURE CONSTANTS G_{LL'} FOR
+!     A SIMPLE BRAVAIS LATTICE. IN THE LATTER CASE THE NONZERO ElEMENTS
+!     G_{LL'} ARE ONLY WHEN EITHER BOTH l+m and l'+m' ARE EITHER EVEN OR ODD
+C     ON THE OUTPUT:
+!     XODD CONTAINS G_{LL'} FOR l+m and l'+m' BOTH ODD
+!     XEVEN CONTAINS G_{LL'} FOR l+m and l'+m' BOTH EVEN
+!
+C     THE ORDERING OF INDICES IS LM=(00),(1-1),(11),(2-2),(20),(22),...
+C     THE PROGRAM ASSUMES THAT THE LAYER IS A BRAVAIS LATTICE. THE
 C     SUMMATION OVER THE LATTICE FOLLOWS THE EWALD METHOD  SUGGESTED BY  
 C     KAMBE. EMACH IS THE MACHINE ACCURACY.  
 C     ------------------------------------------------------------------ 
@@ -3407,14 +3335,14 @@ C
 C  
 C ..  SCALAR ARGUMENTS  ..  
 C  
-      INTEGER    LMAX  
-      REAL*8     EMACH  
-      COMPLEX*16 KAPPA  
+      INTEGER, intent(in) ::    LMAX
+      REAL*8, intent(in) ::     EMACH
+      COMPLEX*16, intent(in) :: KAPPA
 C  
 C ..  ARRAY ARGUMENTS  ..  
 C  
-      REAL*8     AK(2),ELM(NELMD)  
-      COMPLEX*16 XODD(LMODD,LMODD),XEVEN(LMEVEN,LMEVEN)  
+      REAL*8, intent(in) ::     AK(2),ELM(NELMD)
+      COMPLEX*16 , intent(out) :: XODD(LMODD,LMODD),XEVEN(LMEVEN,LMEVEN)
 C  
 C ..  LOCAL SCALARS  ..  
 C 
@@ -3908,8 +3836,8 @@ C
 C  
 C ..  ARRAY ARGUMENTS  ..  
 C  
-      INTEGER    INT(NC)  
-      COMPLEX*16 A(NC,NC)  
+      INTEGER, intent(out) ::    INT(NC)    !INT(N) is not assigned
+      COMPLEX*16, intent(inout) :: A(NC,NC)
 C  
 C ..  LOCAL SCALARS  ..  
 C  
@@ -3956,13 +3884,14 @@ C     ------------------------------------------------------------------
 C  
 C ..  SCALAR ARGUMENTS  ..  
 C  
-      INTEGER N,NC  
-      REAL*8 EMACH  
+      INTEGER, intent(in) ::   N,NC
+      REAL*8, intent(in) :: EMACH
 C  
 C ..  ARRAY ARGUMENTS  ..  
 C  
-      INTEGER    INT(NC)  
-      COMPLEX*16 A(NC,NC),X(NC)  
+      INTEGER, intent(in) ::    INT(NC)
+      COMPLEX*16, intent(inout) :: A(NC,NC)
+      COMPLEX*16, intent(out) :: X(NC)
 C  
 C ..  LOCAL SCALARS  ..  
 C  
@@ -4336,7 +4265,7 @@ C
       IF(IERR.EQ.0) GO TO 2  
 c      CALL ERRCHK(54,54HIN CNAA  , SOME EIGENVALUE NOT FOUND IN 30 ITERA  
 c     1TIONS.)  
-	write(6,*)'SOME EIGENVALUE NOT FOUND IN 30 ITERATIONS'   
+      write(6,*)'SOME EIGENVALUE NOT FOUND IN 30 ITERATIONS'   
       IF(IERR.EQ.N) GO TO 20  
       NMIERR = N - IERR  
       DO 1 I=1,NMIERR  
@@ -4348,7 +4277,7 @@ c     1TIONS.)
       GO TO 20  
 c10    CALL ERRCHK(58,58HIN CNAA  , INPUT DIMENSIONS IN ERROR OR MATRIX I  
 c     1S TOO BIG.) 
- 10	write(6,*)'INPUT DIMENSIONS IN ERROR OR MATRIX IS TOO BIG.' 
+ 10      write(6,*)'INPUT DIMENSIONS IN ERROR OR MATRIX IS TOO BIG.' 
       IERR=-1  
 20    IF(IERR .GT. 0) IERR = N-IERR+1  
       RETURN  
@@ -5060,7 +4989,8 @@ C=======================================================================
       FUNCTION CERF(Z,EMACH)  
       IMPLICIT NONE 
 C     ------------------------------------------------------------------  
-C     CERF,GIVEN COMPLEX ARGUMENT Z,PROVIDES THE COMPLEX ERROR FUNCTION: 
+C     GIVEN COMPLEX ARGUMENT Z, PROVIDES THE FADDEEVA 
+C     COMPLEX ERROR FUNCTION (Eq. (7.2.3) of \ct{Ol}): 
 C     W(Z)=EXP(-Z**2)*(1.0-ERF(-I*Z))  
 C     THE  EVALUATION  ALWAYS  TAKES   PLACE  IN  THE  FIRST   QUADRANT.  
 C     ONE  OF  THREE METHODS  IS  EXPLOYED  DEPENDING ON THE SIZE OF THE 
@@ -5070,7 +5000,7 @@ C     ------------------------------------------------------------------
 C  
 C ..  SCALAR ARGUMENTS  ..  
 C  
-      REAL*8     EMACH  
+      REAL*8, intent(in) :: EMACH
       COMPLEX*16 Z  
 C  
 C ..  LOCAL SCALARS  ..  
@@ -5419,7 +5349,7 @@ C
 C ..  PARAMETER STATEMENTS  ..  
 C  
       INTEGER   IGD,IGKD  
-      PARAMETER (IGD=37,IGKD=2*IGD)  
+      PARAMETER (IGD=37,IGKD=2*IGD)
 C  
 C ..  SCALAR ARGUMENTS  ..  
 C  
@@ -5536,7 +5466,7 @@ C
       character*1 ync
       INTEGER   LMAXD,LMAX1D,LMODD,LMEVEN,LMTD,LM1SQD,IGD,IGKD,NELMD  
       PARAMETER (LMAXD=8,LMAX1D=LMAXD+1,LMODD=(LMAXD*LMAX1D)/2)  
-      PARAMETER (LM1SQD=LMAX1D*LMAX1D,IGD=37,IGKD=2*IGD,NELMD=13593)  
+      PARAMETER (LM1SQD=LMAX1D*LMAX1D,IGD=37,IGKD=2*IGD,NELMD=13593)
       PARAMETER (LMEVEN=(LMAX1D*(LMAX1D+1))/2,LMTD=LM1SQD-1)  
 C  
 C ..  SCALAR ARGUMENTS ..  
@@ -5619,7 +5549,7 @@ C
       IOD=0  
       DO 2 L=1,LMAX  
       DO 2 M=-L,L  
-      II=II+1  
+      II=II+1   !II=1 for l=1,m=-1
       IF(MOD((L+M),2).EQ.0)  THEN  
       IEV=IEV+1  
       BMEL1(IEV)=TH(L+1)*AH(K2,II+1)  
@@ -5648,7 +5578,7 @@ C
       IOD=0  
       DO 6 L=1,LMAX  
       DO 6 M=-L,L  
-      II=II+1  
+      II=II+1     !II=1 for l=1,m=-1
       IF(MOD((L+M),2).EQ.0)  THEN  
       IEV=IEV+1  
       LAME(K1)=LAME(K1)+DLME(K1,II+1)*BMEL2(IEV)  
@@ -5726,7 +5656,7 @@ C
 C ..  PARAMETER STATEMENTS ..  
 C  
       INTEGER   IGD,IGKD,IGK2D  
-      PARAMETER(IGD=37,IGKD=2*IGD,IGK2D=2*IGKD)  
+      PARAMETER(IGD=37,IGKD=2*IGD,IGK2D=2*IGKD)
 C  
 C ..  SCALAR ARGUMENTS  ..  
 C  
@@ -5886,7 +5816,7 @@ C
 C ..  PARAMETER STATEMENTS  ..  
 C  
       INTEGER IGD  
-      PARAMETER (IGD=37)  
+      PARAMETER (IGD=37)
 C  
 C ..  SCALAR ARGUMENTS  ..   
 C  
@@ -6023,16 +5953,16 @@ C*****"AK" IS REDUCED WITHIN THE SBZ
       IF((ABS(AKX).LT.EMACH).AND.(ABS(AKY).LT.EMACH)) RETURN 
       FI0=DATAN2(AKY,AKX)   ! FIND POLAR ANGLES OF THE WAVEVECTOR  
       IF(FI0.LT.0.D0) FI0=FI0+2.D0*PI  
-	    I1=N  
-	    I=1  
+          I1=N  
+          I=1  
     7       CONTINUE  
-	    I2=I  
-	    IF(FI0.LT.FI(I))  GO TO 8   
-	    I=I+1  
-	    I1=I2  
-	    IF(I.LE.N) GO TO 7   
-	    I1=N  
-	    I2=1  
+          I2=I  
+          IF(FI0.LT.FI(I))  GO TO 8   
+          I=I+1  
+          I1=I2  
+          IF(I.LE.N) GO TO 7   
+          I1=N  
+          I2=1  
     8       CONTINUE  
       AM=ABS(Y(I2)*X(I1)-X(I2)*Y(I1))  
       BM=ABS((X(I1)-X(I2))*AKY+(Y(I2)-Y(I1))*AKX)  
